@@ -46,9 +46,7 @@ class DisplayablePath(object):
         Returns:
             str: The display name.
         """
-        if self.path.is_dir():
-            return self.path.name + "/"
-        return self.path.name
+        return f"{self.path.name}/" if self.path.is_dir() else self.path.name
 
     @classmethod
     def make_tree(cls, root: Union[str, Path], parent=None, is_last=False, criteria=None):
@@ -71,11 +69,10 @@ class DisplayablePath(object):
         yield displayable_root
 
         children = sorted(
-            list(path for path in root.iterdir() if criteria(path)),
+            [path for path in root.iterdir() if criteria(path)],
             key=lambda s: str(s).lower(),
         )
-        count = 1
-        for path in children:
+        for count, path in enumerate(children, start=1):
             is_last = count == len(children)
             if path.is_dir() and path.name not in IGNORE_FOLDERS:
                 yield from cls.make_tree(
@@ -83,7 +80,6 @@ class DisplayablePath(object):
                 )
             else:
                 yield cls(path, displayable_root, is_last)
-            count += 1
 
     @classmethod
     def _default_criteria(cls, path: Path) -> bool:
@@ -147,9 +143,7 @@ class TerminalFileSelector:
         for path in self.db_paths:
             n_digits = len(str(count))
             n_spaces = 3 - n_digits
-            if n_spaces < 0:
-                # We can only print 1000 aligned files. I think it is decent enough
-                n_spaces = 0
+            n_spaces = max(n_spaces, 0)
             spaces_str = " " * n_spaces
             if not path.path.is_dir():
                 print(f"{count}. {spaces_str}{path.displayable()}")
@@ -239,10 +233,7 @@ def ask_for_files(db_input) -> None:
     can_use_last = False
     if "file_list.txt" in db_input:
         can_use_last = True
-        use_last_string = (
-            "3. Use previous file list (available at "
-            + f"{os.path.join(db_input.path, 'file_list.txt')})\n"
-        )
+        use_last_string = f"3. Use previous file list (available at {os.path.join(db_input.path, 'file_list.txt')})\n"
         selection_number = 3
     else:
         selection_number = 1
@@ -253,8 +244,7 @@ def ask_for_files(db_input) -> None:
 {use_last_string if len(use_last_string) > 1 else ""}
 Select option and press Enter (default={selection_number}): """
     file_path_list = []
-    selected_number_str = input(selection_str)
-    if selected_number_str:
+    if selected_number_str := input(selection_str):
         try:
             selection_number = int(selected_number_str)
         except ValueError:
@@ -268,20 +258,17 @@ Select option and press Enter (default={selection_number}): """
         # Open GUI selection
         file_path_list = gui_file_selector()
         is_valid_selection = True
-    else:
-        if can_use_last and selection_number == 3:
-            # Use previous file list
-            is_valid_selection = True
+    elif can_use_last and selection_number == 3:
+        # Use previous file list
+        is_valid_selection = True
     if not is_valid_selection:
         print("Invalid number. Select a number from the list above.\n")
         sys.exit(1)
 
-    file_list_string = ""
-    if not selection_number == 3:
-        # New files
-        for file_path in file_path_list:
-            file_list_string += str(file_path) + "\n"
-
+    if selection_number != 3:
+        file_list_string = "".join(
+            str(file_path) + "\n" for file_path in file_path_list
+        )
         # Write in file_list so the user can edit and remember what was done
         db_input["file_list.txt"] = file_list_string
 
@@ -293,14 +280,13 @@ def gui_file_selector() -> List[str]:
     root = tk.Tk()
     root.withdraw()
     root.call("wm", "attributes", ".", "-topmost", True)
-    file_list = list(
+    return list(
         fd.askopenfilenames(
             parent=root,
             initialdir=os.getcwd(),
             title="Select files to improve (or give context):",
         )
     )
-    return file_list
 
 
 def terminal_file_selector() -> List[str]:
@@ -309,5 +295,4 @@ def terminal_file_selector() -> List[str]:
     """
     file_selector = TerminalFileSelector(Path(os.getcwd()))
     file_selector.display()
-    selected_list = file_selector.ask_for_selection()
-    return selected_list
+    return file_selector.ask_for_selection()
